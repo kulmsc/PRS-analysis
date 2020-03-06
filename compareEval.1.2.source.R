@@ -124,8 +124,8 @@ makeResMat <- function(predDf, dfMain, workKey, paramCol, paramNames, currentTra
       #ROC AND AUC PLOTS!!!
       covarLogistic <- glm(response ~ . ,data=dfMainTrain,family="binomial")
       dfTest$prob=predict(completeLogistic, cbind(dfMainTest,pred=predDfTest[,i]), type=c("response"))
-      g=pROC::roc(response ~ prob,data=dfTest)
-      aucs[[iFold]][i,]=as.numeric(ci.auc(g$auc))
+      g=pROC::roc(response ~ prob,data=dfTest, quiet=TRUE)
+      aucs[[iFold]][i,]=as.numeric(ci.auc(g$auc, progress = "none"))
       rocDfTemp=cbind(g$sensitivities,1-g$specificities,rep(workKey[i,paramCol],length(g$specificities)))
       rocDf[[iFold]][(i*1000-999):(i*1000),]=rocDfTemp[seq(1,nrow(rocDfTemp),length.out = 1000),]
 
@@ -133,7 +133,7 @@ makeResMat <- function(predDf, dfMain, workKey, paramCol, paramNames, currentTra
       if(covarLogistic$converged){
         dfMainTest$prob=predict(covarLogistic,dfMainTest,type=c("response"))
         g=pROC::roc(response ~ prob,data=dfMainTest, quiet = TRUE)
-        aucCovar[[iFold]]=as.numeric(ci.auc(g))
+        aucCovar[[iFold]]=as.numeric(ci.auc(g, progress = "none"))
       } else {
         #aucCovar will be the completeLogistic AUC, not good, although will make AUC Improvement 0
         print("AUC Covar did not converge")
@@ -218,9 +218,9 @@ makeResMat <- function(predDf, dfMain, workKey, paramCol, paramNames, currentTra
   predDfTest <- df[,!grepl(paste(c("array","age","sex","PC1","PC2","PC3","PC4","response","covarResp"),collapse="|"),colnames(df)),drop=F]
   for(i in 1:ncol(predDfTest)){
     simpleLogistic <- glm(response ~ pred ,data=cbind(dfMainTest,pred=predDfTest[,i]),family="binomial")
-    resMat$prev[i] <- NagelkerkeR2(completeLogistic)$R2
-    sdHiMat$prev[i] <- NagelkerkeR2(completeLogistic)$R2*1.1
-    sdLowMat$prev[i] <- NagelkerkeR2(completeLogistic)$R2*0.9
+    resMat$prev[i] <- NagelkerkeR2(simpleLogistic)$R2
+    sdHiMat$prev[i] <- NagelkerkeR2(simpleLogistic)$R2*1.1
+    sdLowMat$prev[i] <- NagelkerkeR2(simpleLogistic)$R2*0.9
   }
   #resMat$prev=quotPrev[-length(quotPrev)]
   #sdHiMat$prev=(quotPrev+exp(1.96*sePrev))[-length(quotPrev)]
@@ -304,7 +304,7 @@ enetProc <- function(df, dfMain, bestLamb, goNet){
     
     theModel <- glm(resp ~ ., data=trainInd, family="binomial")
     bestPred=predict(theModel, testInd, type="response")
-    g=pROC::roc(testInd$resp ~ bestPred)
+    g=pROC::roc(testInd$resp ~ bestPred, quiet = TRUE)
     
     auc=c(auc,g$auc)
     tpr=cbind(tpr,g$sensitivities[round(seq(1,length(g$sensitivities),length.out = 1000))])

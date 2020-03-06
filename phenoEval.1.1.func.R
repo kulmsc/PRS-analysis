@@ -244,7 +244,8 @@ if(any(samplingPvals<0.1)){
 }
 
 print("Violin")
-#Violin Plot
+########################################################################################################################################
+#Violin Plot ##########################################################################################################################
 completeLogistic <- glm(response ~ . ,data=trainDf,family="binomial")
 covarLogistic <- glm(response ~ . ,data=trainDf[,-which(colnames(trainDf)=="predictor")],family="binomial")
 simpleLogistic <- glm(response ~ predictor,data=trainDf,family="binomial")
@@ -288,7 +289,7 @@ forReturn=cbind(testDf$response,testDf$regress)
 thePlot=ggplot(testDf,aes(response,regress))+geom_violin(aes(fill=response))+
   geom_boxplot(width=0.1,outlier.alpha = 0)+
   labs(y="disease prediction",title=paste("Comparing Full Model Predictions for",currentTrait),
-       subtitle=paste("Explained Variance:",as.character(expVar)),
+       subtitle=paste("Improved R2:",as.character(expVar)),
        caption=paste("R2:",round(r2,4),
                      "~ Best sampling method:",bestMethod,
                      "~ PRS Beta Confint:",round(predConfint[2,1],3),"-",round(predConfint[2,2],3)))+
@@ -302,6 +303,16 @@ print(head(testDf$regress[order(testDf$regress,decreasing=T)]))
 copyTest <- data.frame(testDf)
 copyTest <- copyTest[copyTest$regress < testDf$regress[order(testDf$regress,decreasing=T)][100] &
              copyTest$regress > testDf$regress[order(testDf$regress,decreasing=F)][100],]
+
+thePlot <- ggplot(copyTest,aes(x="base",y=predictor, fill=response)) +geom_split_violin()+
+  geom_boxplot(width = 0.25, outlier.shape = NA, coef=0)+
+  scale_fill_discrete(name="status",labels=c("Healthy","Disease"))+
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  labs(y="polygenic risk score prediction",title=paste("Comparing Polygenic Risk Score for",currentTrait),
+       subtitle=paste("Explained Variance:",as.character(expVar)),
+       caption=paste("PRS Beta Confint:",round(predConfint[2,1],3),"-",round(predConfint[2,2],3)))
+plot(thePlot)
+
 thePlot <- ggplot(copyTest,aes(x="base",y=regress, fill=response)) +geom_split_violin()+
   geom_boxplot(width = 0.25, outlier.shape = NA, coef=0)+
   scale_fill_discrete(name="status",labels=c("Healthy","Disease"))+
@@ -314,96 +325,134 @@ plot(thePlot)
 
 
 print("Odds")
-#Odds Ratios and Relative Risks
-testDf=testDf[order(testDf$regress,decreasing = T),]
-allCutOffs=c(0.5,0.2,0.1,0.05,0.01,0.005)
-resHolder=data.frame(matrix(0,nrow=length(allCutOffs),ncol=8))
-colnames(resHolder)=c("fullOR","fullRR","bottomOR","bottomRR","fullLo","fullHi","bottomLo","bottomHi")
-resHolderHi=data.frame(resHolder)
-resHolderLo=data.frame(resHolder)
-bottomHalf=testDf[(round(nrow(testDf)*0.5)+1):nrow(testDf),ncol(trainDf)]
+#####################################################################################################################
+#Odds Ratios and Relative Risks #####################################################################################
 
-i=1
-for(cutOff in allCutOffs){
-  exposeGroup=testDf[1:round(nrow(testDf)*cutOff),ncol(trainDf)]
-  safeGroup=testDf[(round(nrow(testDf)*cutOff)+1):nrow(testDf),ncol(trainDf)]
+orPlotter <- function(testDf, sortBy){
+  if(sortBy == "PRS"){
+    testDf=testDf[order(testDf$predictor, decreasing = T),]
+  } else if(sortBy == "Complete Model"){
+    testDf=testDf[order(testDf$regress, decreasing = T),]
+  }
+
+  allCutOffs=c(0.5,0.2,0.1,0.05,0.01,0.005)
+  resHolder=data.frame(matrix(0,nrow=length(allCutOffs),ncol=8))
+  colnames(resHolder)=c("fullOR","fullRR","bottomOR","bottomRR","fullLo","fullHi","bottomLo","bottomHi")
+  resHolderHi=data.frame(resHolder)
+  resHolderLo=data.frame(resHolder)
+  bottomHalf=testDf[(round(nrow(testDf)*0.5)+1):nrow(testDf),ncol(trainDf)]
+
+  i=1
+  for(cutOff in allCutOffs){
+    exposeGroup=testDf[1:round(nrow(testDf)*cutOff),ncol(trainDf)]
+    safeGroup=testDf[(round(nrow(testDf)*cutOff)+1):nrow(testDf),ncol(trainDf)]
   
-  resHolder[i,1]=(sum(exposeGroup==1)/sum(exposeGroup==0))/(sum(safeGroup==1)/sum(safeGroup==0))
-  se=sqrt((1/sum(exposeGroup==1))+(1/sum(exposeGroup==0))+(1/sum(safeGroup==1))+(1/sum(safeGroup==0)))
-  resHolder[i,5]=exp(log(resHolder[i,1])-(1.96*se))
-  resHolder[i,6]=exp(log(resHolder[i,1])+(1.96*se))
-  resHolder[i,2]=(sum(exposeGroup==1)/length(exposeGroup))/(sum(safeGroup==1)/length(safeGroup))
-  resHolder[i,3]=(sum(exposeGroup==1)/sum(exposeGroup==0))/(sum(bottomHalf==1)/sum(bottomHalf==0))
-  se=sqrt((1/sum(exposeGroup==1))+(1/sum(exposeGroup==0))+(1/sum(bottomHalf==1))+(1/sum(bottomHalf==0)))
-  resHolder[i,7]=exp(log(resHolder[i,3])-(1.96*se))
-  resHolder[i,8]=exp(log(resHolder[i,3])+(1.96*se))
-  resHolder[i,4]=(sum(exposeGroup==1)/length(exposeGroup))/(sum(bottomHalf==1)/length(bottomHalf))
-  i=i+1
-}
+    resHolder[i,1]=(sum(exposeGroup==1)/sum(exposeGroup==0))/(sum(safeGroup==1)/sum(safeGroup==0))
+    se=sqrt((1/sum(exposeGroup==1))+(1/sum(exposeGroup==0))+(1/sum(safeGroup==1))+(1/sum(safeGroup==0)))
+    resHolder[i,5]=exp(log(resHolder[i,1])-(1.96*se))
+    resHolder[i,6]=exp(log(resHolder[i,1])+(1.96*se))
+    resHolder[i,2]=(sum(exposeGroup==1)/length(exposeGroup))/(sum(safeGroup==1)/length(safeGroup))
+    resHolder[i,3]=(sum(exposeGroup==1)/sum(exposeGroup==0))/(sum(bottomHalf==1)/sum(bottomHalf==0))
+    se=sqrt((1/sum(exposeGroup==1))+(1/sum(exposeGroup==0))+(1/sum(bottomHalf==1))+(1/sum(bottomHalf==0)))
+    resHolder[i,7]=exp(log(resHolder[i,3])-(1.96*se))
+    resHolder[i,8]=exp(log(resHolder[i,3])+(1.96*se))
+    resHolder[i,4]=(sum(exposeGroup==1)/length(exposeGroup))/(sum(bottomHalf==1)/length(bottomHalf))
+    i=i+1
+  }
 
-resHolder$cutOff=allCutOffs
-resPlot=melt(resHolder,id.vars="cutOff")
-resPlot$cutOff=factor(resPlot$cutOff,levels=unique(resPlot$cutOff[order(resPlot$cutOff,decreasing = T)]))
-rp1=resPlot[1:24,]
-rp2=resPlot[25:48,]
-thePlot=ggplot(resPlot[1:24,],aes(cutOff,value,color=variable))+geom_point(position=position_dodge(width=0.3))+
-  geom_errorbar(aes(ymin=c(resPlot[25:30,3],rep(NA,6),resPlot[37:42,3],rep(NA,6)),
+  resHolder$cutOff=allCutOffs
+  resPlot=melt(resHolder,id.vars="cutOff")
+  resPlot$cutOff=factor(resPlot$cutOff,levels=unique(resPlot$cutOff[order(resPlot$cutOff,decreasing = T)]))
+  rp1=resPlot[1:24,]
+  rp2=resPlot[25:48,]
+  thePlot=ggplot(resPlot[1:24,],aes(cutOff,value,color=variable))+geom_point(position=position_dodge(width=0.3))+
+    geom_errorbar(aes(ymin=c(resPlot[25:30,3],rep(NA,6),resPlot[37:42,3],rep(NA,6)),
                     ymax=c(resPlot[31:36,3],rep(NA,6),resPlot[43:48,3],rep(NA,6))),
                 width=0.2,position=position_dodge(width=0.3))+
-  labs(title="Risk/Odds Ratios of Being in Score Groups", x="Top Score Fraction Cutoff",y="")
-plot(thePlot)
+  labs(title="Risk/Odds Ratios of Being in Score Groups", x="Top Score Fraction Cutoff",y="",caption=paste("sorted by:",sortBy))
 
+  return(list(resHolder,thePlot))
+}
+
+ans <- orPlotter(testDf, "Complete Model")
+plot(ans[[2]])
+
+ans <- orPlotter(testDf, "PRS")
+plot(ans[[2]])
+resHolder <- ans[[1]]
 
 print("Prev")
 print("UNADJ PREV")
-#unadjusted disease prevalance
-testDf=testDf[order(testDf$predictor,decreasing = T),]
-diseasePrev=rep(0,100)
-diseaseOrHi=rep(0,100)
-diseaseOrLo=rep(0,100)
-testDf$group=rep(0,nrow(testDf))
-groupRanges=c(round(seq(1,nrow(testDf),by = nrow(testDf)/100)),nrow(testDf))
-for(i in 1:100){
-  testDf$group[groupRanges[i]:groupRanges[i+1]]=i
-}
-testDf$group=rev(testDf$group)
-for(i in 1:100){
-  withDis=sum(testDf[testDf$group==i,ncol(trainDf)]==1)
-  totalGroup=sum(testDf$group==i)
-  diseasePrev[i]=withDis/totalGroup
+####################################################################################################################################
+#unadjusted disease prevalance #####################################################################################################
+
+prevPlotter <- function(testDf, sortBy){
+  if(sortBy == "PRS"){
+    testDf=testDf[order(testDf$predictor,decreasing = T),]
+  } else if(sortBy == "Complete Model"){
+    testDf=testDf[order(testDf$regress,decreasing = T),]
+  }
+
+  diseasePrev=rep(0,100)
+  diseaseOrHi=rep(0,100)
+  diseaseOrLo=rep(0,100)
+  testDf$group=rep(0,nrow(testDf))
+  groupRanges=c(round(seq(1,nrow(testDf),by = nrow(testDf)/100)),nrow(testDf))
+  for(i in 1:100){
+    testDf$group[groupRanges[i]:groupRanges[i+1]]=i
+  }
+  testDf$group=rev(testDf$group)
+  for(i in 1:100){
+    withDis=sum(testDf[testDf$group==i,ncol(trainDf)]==1)
+    totalGroup=sum(testDf$group==i)
+    diseasePrev[i]=withDis/totalGroup
   
-  #diseaseOrHi[i]=(sum(testDf[testDf$group>=i,9]==1)*sum(testDf[testDf$group<i,9]==0))/
-  #  (sum(testDf[testDf$group>=i,9]==0)*sum(testDf[testDf$group<i,9]==1))
-  diseaseOrLo[i]=(sum(testDf[testDf$group>i,ncol(trainDf)]==0)*sum(testDf[testDf$group<=i,ncol(trainDf)]==1))/
-    (sum(testDf[testDf$group>i,ncol(trainDf)]==1)*sum(testDf[testDf$group<=i,ncol(trainDf)]==0))
-  diseaseOrHi[i]=(sum(testDf[testDf$group>=i,ncol(trainDf)]==0)*sum(testDf[testDf$group<i,ncol(trainDf)]==1))/
-    (sum(testDf[testDf$group>=i,ncol(trainDf)]==1)*sum(testDf[testDf$group<i,ncol(trainDf)]==0))
-}
-diseaseOr=c(diseaseOrLo[1],((diseaseOrHi[2:99]+diseaseOrLo[2:99])/2),diseaseOrHi[100])
-diseaseOr=diseaseOr/diseaseOr[50]
-#diseaseOr=c((diseaseOrLo*(1/diseaseOrLo[50]))[1:50],(diseaseOrHi*(1/diseaseOrHi[50]))[51:100])
-prevDf=data.frame(percentile=1:100,diseasePrev,diseaseOr)
-diffTopBottom=mean(prevDf$diseasePrev[90:100])/mean(prevDf$diseasePrev[1:10])
-corVal=round(cor(prevDf$diseasePrev,prevDf$percentile),5)
-thePlot=ggplot(prevDf,aes(percentile,diseasePrev,color=diseaseOr))+geom_point()+
-  labs(title=paste("Prevalence for",currentTrait),
+    #diseaseOrHi[i]=(sum(testDf[testDf$group>=i,9]==1)*sum(testDf[testDf$group<i,9]==0))/
+    #  (sum(testDf[testDf$group>=i,9]==0)*sum(testDf[testDf$group<i,9]==1))
+    diseaseOrLo[i]=(sum(testDf[testDf$group>i,ncol(trainDf)]==0)*sum(testDf[testDf$group<=i,ncol(trainDf)]==1))/
+      (sum(testDf[testDf$group>i,ncol(trainDf)]==1)*sum(testDf[testDf$group<=i,ncol(trainDf)]==0))
+    diseaseOrHi[i]=(sum(testDf[testDf$group>=i,ncol(trainDf)]==0)*sum(testDf[testDf$group<i,ncol(trainDf)]==1))/
+      (sum(testDf[testDf$group>=i,ncol(trainDf)]==1)*sum(testDf[testDf$group<i,ncol(trainDf)]==0))
+  }
+
+  diseaseOr=c(diseaseOrLo[1],((diseaseOrHi[2:99]+diseaseOrLo[2:99])/2),diseaseOrHi[100])
+  diseaseOr=diseaseOr/diseaseOr[50]
+  #diseaseOr=c((diseaseOrLo*(1/diseaseOrLo[50]))[1:50],(diseaseOrHi*(1/diseaseOrHi[50]))[51:100])
+  prevDf=data.frame(percentile=1:100,diseasePrev,diseaseOr)
+  diffTopBottom=mean(prevDf$diseasePrev[90:100])/mean(prevDf$diseasePrev[1:10])
+  corVal=round(cor(prevDf$diseasePrev,prevDf$percentile),5)
+
+  thePlot1=ggplot(prevDf,aes(percentile,diseasePrev))+geom_point()+
+    labs(title=paste("Prevalence for", currentTrait, "sorted by", sortBy),
        y="unadjusted disease prevalence",
        x="PRS percentile",
        subtitle=paste("multiple between top/bottom deciles:",round(diffTopBottom,4)),
-       caption=paste("correlation:",as.character(corVal)))+
-  guides(color=guide_legend(title="Std. OR"))
-plot(thePlot)
+       caption=paste("correlation:",as.character(corVal)))
+  #guides(color=guide_legend(title="Std. OR"))
 
-thePlot=ggplot(testDf,aes(response,group))+
-  geom_violin(aes(fill=response))+geom_boxplot(width=0.1,outlier.alpha = 0)+
-  scale_x_discrete(labels=c("no disease","yes disease"))+
-  scale_fill_discrete(guide=FALSE)+
-  labs(title="Prevalence of Disease Split by Cases/Controls",y="Percentile")
-plot(thePlot)
+  thePlot2=ggplot(testDf,aes(response,group))+
+    geom_violin(aes(fill=response))+geom_boxplot(width=0.1,outlier.alpha = 0)+
+    scale_x_discrete(labels=c("no disease","yes disease"))+
+    scale_fill_discrete(guide=FALSE)+
+    labs(title="Prevalence of Disease Split by Cases/Controls", y="Percentile", caption=paste("Sorted by:", sortBy))
+
+  return(list(prevDf, thePlot1, thePlot2))
+}
+
+ans <- prevPlotter(testDf, "PRS")
+plot(ans[[2]])
+plot(ans[[3]])
+prevDf <- ans[[1]]
+
+ans <- prevPlotter(testDf, "Complete Model")
+plot(ans[[2]])
+plot(ans[[3]])
+
 
 
 print("ROC STUFF")
-#ROC stuff
+#########################################################################################################################
+#ROC stuff ##############################################################################################################
 testDf$prob=predict(simpleLogistic,testDf,type="response")
 gSimple=pROC::roc(response ~ prob,data=testDf)
 aucSimple=as.numeric(ci.auc(gSimple))

@@ -13,6 +13,8 @@ compareEval<-function(authorComp,finalCrit,plotAll,phenoDefs,fileDefs,trainPheno
 			shortRead,covarDefs,includeEnet,goNet){
 
 source("compareEval.1.2.source.R")
+set.seed(rand_addon)
+
 pdf(paste(authorComp,"compare","pdf",sep='.'))
 options(warn=1)
 
@@ -56,9 +58,13 @@ if(sum(checkZero==0)>0){
 allScores=apply(allScores,2,function(x) (x-mean(x))/sd(x)) #maybe don't do this 
 
 #in the decoder pull out the line corresponding to the author
+saveRDS(phenoDefs, "phenoDefs.RDS")
+saveRDS(authorComp, "authorComp.RDS")
 decoder=phenoDefs[phenoDefs[,1]==authorComp,]
 decoder=unname(unlist(decoder))
+print("still good")
 names(decoder)=colnames(phenoDefs)
+print("did good")
 
 #do the same for covariates
 covarDecoder=covarDefs[covarDefs[,1]==authorComp,]
@@ -218,7 +224,9 @@ for(method in unique(key$methods)){
   for(paramCol in 3:(ncol(key))){
     print("paramcol")
     print(paramCol)
-    if(length(unique(newKey[,paramCol]))>1 | paramCol==3 | length(filesChecked)<nrow(newKey) ){
+
+
+    if(length(unique(newKey[,paramCol]))>1 | paramCol==3 | length(unique(filesChecked)) < nrow(newKey) ){
       print("past the unique key if")
       print("files checked")
       print(filesChecked)
@@ -232,7 +240,7 @@ for(method in unique(key$methods)){
       #if we are at the last parameter, just include all the files that have not been checked yet
 
       if(paramCol==ncol(key)){
-        if(length(filesChecked) < nrow(key)){
+        if(length(unique(filesChecked)) < nrow(key)){
           workKey <- newKey[!(newKey$fName %in% filesChecked),]
           plotAll=FALSE
         }
@@ -251,6 +259,7 @@ for(method in unique(key$methods)){
       print("work key!!!")
       print(workKey)
       
+
       predDf=allScores[,colnames(allScores) %in% workKey$fName, drop=F]
       predDf=predDf[,order(colnames(predDf))[rank(workKey[,1])], drop=F]
 
@@ -302,14 +311,22 @@ tprCovar <- apply(tprCovar,1,mean)
 print("308")
 #get index of the best parameter set for each method
 totalResMat=totalResMat[!duplicated(totalResMat$fName),]
+totalResMat <- totalResMat[!is.na(totalResMat$AUC),]
 bestIndices <- rep(0,length(unique(totalResMat$methods)))
 i=1
 for(umethod in unique(totalResMat$methods)){
   print(umethod)
-  umethodAuc <- max(totalResMat[totalResMat$methods==umethod,12])
+  possAuc <- totalResMat[totalResMat$methods == umethod, 12]
+  print(possAuc)
+  if(any(is.finite(possAuc))){
+  umethodAuc <- max(possAuc[is.finite(possAuc)])
+  #umethodAuc <- max(totalResMat[totalResMat$methods == umethod, 12])
   print(umethodAuc)
   print(totalResMat$AUC)
   bestIndices[i] <- which(colnames(allScores) == totalResMat$fName[which(totalResMat$AUC==umethodAuc)[1]])
+  } else {
+  bestIndices[i] <- which(colnames(allScores) == colnames(allScores)[grepl(umethod, colnames(allScores))])
+  }
   i=i+1
 }
 
